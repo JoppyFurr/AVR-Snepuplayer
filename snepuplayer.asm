@@ -1,9 +1,34 @@
 .include "/usr/share/avra/m8def.inc"
 
-.def counter_0 = r16
-.def counter_1 = r17
-.def counter_2 = r18
-.def counter_3 = r19
+.def prod_low    = r0
+.def prod_high   = r1
+
+; SN79489 registers
+.def tone_0      = r2
+.def tone_1      = r3
+.def tone_2      = r4
+.def noise       = r5
+.def counter_0   = r6
+.def counter_1   = r7
+.def counter_2   = r8
+.def counter_3   = r9
+.def lfsr_l      = r10
+.def lfsr_h      = r11
+
+.def volume_0    = r16
+.def volume_1    = r17
+.def volume_2    = r18
+.def volume_3    = r19
+.def output_0    = r20
+.def output_1    = r21
+.def output_2    = r22
+.def output_3    = r23
+.def output      = r24
+.def output_lfsr = r25
+.def do_update   = r26
+
+.def tick_temp   = r30
+.def main_temp   = r31
 
 .org 0x0000 ; Reset
     rjmp Init
@@ -14,46 +39,115 @@
 .org 0x0012
     reti    ; Catch-all for unexpected interrupts
 
+    ; Rather than ticking at the rate of a real Master System,
+    ; simulate the PSG at one quarter its normal speed. This
+    ; allows us to use 8-bit timers in place of 10-bit timers.
 Tick:
-    ; as at test, just output a counter
-    inc r20
-    out PortC,  r20
+
+Tone0_decrement:
+    ; ~137 cycles remaining
+    tst     counter_0
+    breq    Tone0_toggle
+    dec     counter_0
+
+Tone0_toggle:
+    ; ~134 cycles remaining
+    tst     counter_0
+    breq    Tone1_decrement
+    neg     output_0
+    ldi     do_update,  0x01
+
+Tone1_decrement:
+    ; ~131 cycles remaining
+    tst     counter_1
+    breq    Tone1_toggle
+    dec     counter_1
+
+Tone1_toggle:
+    ; ~128 cycles remaining
+    tst     counter_1
+    breq    Tone2_decrement
+    neg     output_1
+    ldi     do_update,  0x01
+
+Tone2_decrement:
+    ; ~125 cycles remaining
+    tst     counter_2
+    breq    Tone2_toggle
+    dec     counter_2
+
+Tone2_toggle:
+    ; ~122 cycles remaining
+    tst     counter_2
+    breq    Noise_decrement
+    neg     output_2
+    ldi     do_update,  0x01
+
+Noise_decrement:
+    ; TODO: Implement the noise channel
+
+Update:
+    ; ~119 cycles remaining
+    tst     do_update
+    breq    Tick_done
+    clr     do_update
+    muls    output_0,   volume_0
+    mov     output,     prod_low
+    muls    output_1,   volume_1
+    add     output,     prod_low
+    muls    output_2,   volume_2
+    add     output,     prod_low
+    ; TODO: Convert signed to unsigned with an offset
+    ;       -128 ->   0
+    ;          0 -> 128
+    ;       +127 -> 255
+    out     PortC,      output
+
+Tick_done:
     reti
 
 Init:
     ; Set up the stack pointer
-    ldi r31,    low(RAMEND)
-    out spl,    r31
-    ldi r31,    high(RAMEND)
-    out sph,    r31
+    ldi     main_temp,  low(RAMEND)
+    out     spl,        main_temp
+    ldi     main_temp,  high(RAMEND)
+    out     sph,        main_temp
 
     ; Set Port C as six-bit output
-    ldi r31,    0x3f
-    out DDRC,   r31
-
-    ; As a test, set a bit
-    ldi r20,    0b00000001
-    out PortC,  r20
+    ldi     main_temp,  0x3f
+    out     DDRC,       main_temp
 
     ; Timer1: CTC mode with no prescaling
-    ldi r31,    0x00
-    out TCCR1A, r31
-    ldi r31,    0x09
-    out TCCR1B, r31
+    ldi     main_temp,  0x00
+    out     TCCR1A,     main_temp
+    ldi     main_temp,  0x09
+    out     TCCR1B,     main_temp
 
-    ; Timer1: Count to 36
-    ldi r31,    0x00
-    out OCR1AH, r31
-    ldi r31,    0x24 ; At 8 MHz, this will be about 0.7% slower than a real SMS
-    out OCR1AL, r31
+    ; Timer1: Count to 143
+    ;   We will tick at one quarter the rate of the SMS's PSG,
+    ldi     main_temp,  0x00
+    out     OCR1AH,     main_temp
+    ldi     main_temp,  0x8f
+    out     OCR1AL,     main_temp
 
     ; Unmask the Compare Match A interrupt
-    ldi r31,    0x10
-    out TIMSK,  r31
+    ldi     main_temp,  0x10
+    out     TIMSK,      main_temp
+
+    ; Initial values for SN79489
+    ldi     main_temp,  0x0f
+    mov     volume_0,   main_temp
+    mov     volume_0,   main_temp
+    mov     volume_0,   main_temp
+    mov     volume_0,   main_temp
+    ldi     output_0,   0x01
+    ldi     output_0,   0xff
+    ldi     output_0,   0x01
+    ldi     output_0,   0xff
 
     ; Enable interrupts
     sei
 
 Main:
     nop
-    rjmp Main
+    rjmp    Main
