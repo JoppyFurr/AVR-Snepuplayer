@@ -161,6 +161,10 @@ Init:
     ldi     output_1,   0xff
     ldi     output_2,   0x01
     ldi     output_3,   0xff
+    ldi     volume_0,   0x00
+    ldi     volume_1,   0x00
+    ldi     volume_2,   0x00
+    ldi     volume_3,   0x00
 
     ; Enable interrupts
     sei
