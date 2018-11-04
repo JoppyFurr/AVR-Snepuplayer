@@ -52,8 +52,10 @@ Tone0_decrement:
 
 Tone0_toggle:
     ; ~134 cycles remaining
+    ; TODO: When tone=0, output=1
     tst     counter_0
-    breq    Tone1_decrement
+    brne    Tone1_decrement
+    mov     counter_0,  tone_0
     neg     output_0
     ldi     do_update,  0x01
 
@@ -66,7 +68,8 @@ Tone1_decrement:
 Tone1_toggle:
     ; ~128 cycles remaining
     tst     counter_1
-    breq    Tone2_decrement
+    brne    Tone2_decrement
+    mov     counter_1,  tone_1
     neg     output_1
     ldi     do_update,  0x01
 
@@ -79,7 +82,8 @@ Tone2_decrement:
 Tone2_toggle:
     ; ~122 cycles remaining
     tst     counter_2
-    breq    Noise_decrement
+    brne    Noise_decrement
+    mov     counter_2,  tone_2
     neg     output_2
     ldi     do_update,  0x01
 
@@ -91,8 +95,8 @@ Update:
     tst     do_update
     breq    Tick_done
     clr     do_update
-    muls    output_0,   volume_0
-    mov     output,     prod_low
+    muls    output_0,   volume_0 ; The real PSG inverts the volume, so pre-
+    mov     output,     prod_low ; process tracks so we don't have to.
     muls    output_1,   volume_1
     add     output,     prod_low
     muls    output_2,   volume_2
@@ -101,6 +105,7 @@ Update:
     ;       -128 ->   0
     ;          0 -> 128
     ;       +127 -> 255
+    ; TODO: Save components by using PWM for output
     out     PortC,      output
 
 Tick_done:
