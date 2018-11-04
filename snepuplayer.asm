@@ -26,6 +26,9 @@
 .def output      = r24
 .def output_lfsr = r25
 .def do_update   = r26
+.def tick_count  = r27
+.def tick_goal   = r28
+.def delay_ms    = r29
 
 .def tick_temp   = r30
 .def main_temp   = r31
@@ -43,6 +46,7 @@
     ; simulate the PSG at one quarter its normal speed. This
     ; allows us to use 8-bit timers in place of 10-bit timers.
 Tick:
+    inc     tick_count
 
 Tone0_decrement:
     ; ~137 cycles remaining
@@ -111,6 +115,19 @@ Update:
 Tick_done:
     reti
 
+Delay:
+    ; Wait for 56 interrupts per ms
+    mov     tick_goal,  tick_count
+    ldi     main_temp,  56
+    add     tick_goal,  main_temp
+
+Delay_keep_waiting:
+    cp      tick_goal,  tick_count
+    brne    Delay_keep_waiting
+    dec     delay_ms
+    brne    Delay
+    ret
+
 Init:
     ; Set up the stack pointer
     ldi     main_temp,  low(RAMEND)
@@ -140,19 +157,33 @@ Init:
     out     TIMSK,      main_temp
 
     ; Initial values for SN79489
-    ldi     main_temp,  0x0f
-    mov     volume_0,   main_temp
-    mov     volume_0,   main_temp
-    mov     volume_0,   main_temp
-    mov     volume_0,   main_temp
     ldi     output_0,   0x01
-    ldi     output_0,   0xff
-    ldi     output_0,   0x01
-    ldi     output_0,   0xff
+    ldi     output_1,   0xff
+    ldi     output_2,   0x01
+    ldi     output_3,   0xff
 
     ; Enable interrupts
     sei
 
 Main:
-    nop
+    ; For now, toggle between A and C
+
+    ; A ~440 Hz
+    ldi     main_temp,  0x03
+    mov     volume_0,   main_temp
+    ldi     main_temp,  0x40
+    mov     tone_0,     main_temp
+
+    ldi     delay_ms,   250
+    rcall   Delay
+
+    ; C ~523 Hz
+    ldi     main_temp,  0x01
+    mov     volume_0,   main_temp
+    ldi     main_temp,  0x35
+    mov     tone_0,     main_temp
+
+    ldi     delay_ms,   250
+    rcall   Delay
+
     rjmp    Main
