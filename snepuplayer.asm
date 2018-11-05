@@ -105,12 +105,11 @@ Update:
     add     output,     prod_low
     muls    output_2,   volume_2
     add     output,     prod_low
-    ; TODO: Convert signed to unsigned with an offset
-    ;       -128 ->   0
-    ;          0 -> 128
-    ;       +127 -> 255
-    ; TODO: Save components by using PWM for output
-    out     PortC,      output
+
+    ; Centre signed output as 128 for unsigned output
+    ldi     tick_temp,  128
+    add     output,     tick_temp
+    out     OCR2,       output
 
 Tick_done:
     reti
@@ -135,26 +134,25 @@ Init:
     ldi     main_temp,  high(RAMEND)
     out     sph,        main_temp
 
-    ; Set Port C as six-bit output
-    ldi     main_temp,  0x3f
-    out     DDRC,       main_temp
-
-    ; Timer1: CTC mode with no prescaling
+    ; Timer1: Tick source, CTC mode with no prescaling
     ldi     main_temp,  0x00
     out     TCCR1A,     main_temp
     ldi     main_temp,  0x09
     out     TCCR1B,     main_temp
 
-    ; Timer1: Count to 143
-    ;   We will tick at one quarter the rate of the SMS's PSG,
+    ; Timer1: Interrupt on counting to 143
     ldi     main_temp,  0x00
     out     OCR1AH,     main_temp
     ldi     main_temp,  0x8f
     out     OCR1AL,     main_temp
-
-    ; Unmask the Compare Match A interrupt
     ldi     main_temp,  0x10
     out     TIMSK,      main_temp
+
+    ; Timer2: Fast-PWM Output on PortB-3
+    ldi     main_temp,  0x69
+    out     TCCR2,      main_temp
+    ldi     main_temp,  0x08
+    out     DDRB,       main_temp
 
     ; Initial values for SN79489
     ldi     output_0,   0x01
