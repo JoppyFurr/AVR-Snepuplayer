@@ -27,6 +27,9 @@ typedef struct psg_regs_s
 psg_regs current_state = { 0 };
 uint8_t write_delay_count = 0;
 
+uint8_t  output[8192] = { 0 };
+uint32_t output_size = 0;
+
 /* TODO: Support delays > 3/60s. */
 int write_frame (void)
 {
@@ -100,9 +103,8 @@ int write_frame (void)
 
     for (int i = 0; i < frame_size; i++)
     {
-        printf ("%02x ", frame[i]);
+        output [output_size++] = frame[i];
     }
-    printf ("\n");
 
     memcpy (&previous_state, &current_state, sizeof (psg_regs));
 
@@ -118,9 +120,6 @@ int main (int argc, char **argv)
     uint16_t data_low = 0;
     uint16_t data_high = 0;
     uint16_t data_volume = 0;
-
-    /* Statistics */
-    uint32_t statistic_total_output_size = 0;
 
     if (argc != 2)
     {
@@ -178,7 +177,7 @@ int main (int argc, char **argv)
         case 0x50: /* PSG Data */
             if (write_delay_count)
             {
-                statistic_total_output_size += write_frame ();
+                write_frame ();
                 write_delay_count = 0;
             }
             data = buffer[++i];
@@ -302,9 +301,7 @@ int main (int argc, char **argv)
             break;
 #endif
         case 0x66: /* End of sound data */
-            statistic_total_output_size += write_frame ();
-            write_delay_count = 0;
-            statistic_total_output_size += write_frame ();
+            write_frame ();
             i = 12 * 1024;
             break;
         default:
@@ -312,7 +309,14 @@ int main (int argc, char **argv)
         }
     }
 
-    fprintf (stderr, "Done. %d bytes output.\n", statistic_total_output_size);
+    printf (".db");
+    for (int i = 0; i < output_size; i++)
+    {
+        printf (" 0x%02x%s", output[i], (i & 7) == 7 ? "\n.db" : ",");
+    }
+    printf (" 0x00\n");
+
+    fprintf (stderr, "Done. %d bytes output.\n", output_size);
 
     free (buffer);
     fclose (source_vgm);
