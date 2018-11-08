@@ -34,15 +34,6 @@ int write_frame (void)
     uint8_t frame[8] = { 0 };
     uint8_t frame_size = 1;
 
-#if 0
-    /* Dump state */
-    printf ("{ Tone0: %02x:%01x, Tone1: %02x:%01x, Tone2: %02x:%01x, Delay: %02x }\n",
-            current_state.tone_0, current_state.volume_0,
-            current_state.tone_1, current_state.volume_1,
-            current_state.tone_2, current_state.volume_2,
-            write_delay_count);
-#endif
-
     /* Header format description:
      *
      *  Bitfields: ddvv nttt
@@ -129,12 +120,6 @@ int main (int argc, char **argv)
     uint16_t data_volume = 0;
 
     /* Statistics */
-    uint32_t statistic_tone0_bytes_written = 0;
-    uint32_t statistic_tone1_bytes_written = 0;
-    uint32_t statistic_tone2_bytes_written = 0;
-    uint32_t statistic_noise_bytes_written = 0;
-    uint32_t statistic_frame_count = 0;
-    uint32_t statistic_delays = 0;
     uint32_t statistic_total_output_size = 0;
 
     if (argc != 2)
@@ -176,16 +161,12 @@ int main (int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    printf ("Version: %x.\n",       * (uint32_t *)(&buffer[0x08]));
-    printf ("Clock rate: %d Hz.\n", * (uint32_t *)(&buffer[0x0c]));
-    printf ("Rate: %d Hz.\n",       * (uint32_t *)(&buffer[0x24]));
+    fprintf (stderr, "Version: %x.\n",       * (uint32_t *)(&buffer[0x08]));
+    fprintf (stderr, "Clock rate: %d Hz.\n", * (uint32_t *)(&buffer[0x0c]));
+    fprintf (stderr, "Rate: %d Hz.\n",       * (uint32_t *)(&buffer[0x24]));
 
     /* TODO: For now, we assume the version is less than 1.50 and that
      *       data starts at 0x40 */
-
-    /* TODO: Preprocess to make things easier on the micro
-     *  * Truncate tone registers to 8-bits
-     */
 
     for (uint32_t i = 0x40; i < (12 * 1024); i++)
     {
@@ -199,7 +180,6 @@ int main (int argc, char **argv)
             {
                 statistic_total_output_size += write_frame ();
                 write_delay_count = 0;
-                statistic_frame_count++;
             }
             data = buffer[++i];
             data_low  = data & 0x0f;
@@ -214,56 +194,48 @@ int main (int argc, char **argv)
                 switch (latch)
                 {
                 /* Tone0 */
-                case 0x00: statistic_tone0_bytes_written++;
+                case 0x00:
 
-                    /* printf ("Tone0 low    = %03x\n", data_low); */
                     current_state.tone_0 &= 0xfc;
                     current_state.tone_0 |= (data_low >> 2);
                     break;
 
-                case 0x10: statistic_tone0_bytes_written++;
+                case 0x10:
 
-                    /* printf ("Tone0 volume = %01x\n", data_volume); */
                     current_state.volume_0 = data_volume;
                     break;
 
                 /* Tone1 */
-                case 0x20: statistic_tone1_bytes_written++;
+                case 0x20:
 
-                    /* printf ("Tone1 low    = %03x\n", data_low); */
                     current_state.tone_1 &= 0xfc;
                     current_state.tone_1 |= (data_low >> 2);
                     break;
 
-                case 0x30: statistic_tone1_bytes_written++;
+                case 0x30:
 
-                    /* printf ("Tone1 volume = %01x\n", data_volume); */
                     current_state.volume_1 = data_volume;
                     break;
 
                 /* Tone2 */
-                case 0x40: statistic_tone2_bytes_written++;
+                case 0x40:
 
-                    /* printf ("Tone2 low    = %03x\n", data_low); */
                     current_state.tone_2 &= 0xfc;
                     current_state.tone_2 |= (data_low >> 2);
                     break;
 
-                case 0x50: statistic_tone2_bytes_written++;
+                case 0x50:
 
-                    /* printf ("Tone2 volume = %01x\n", data_volume); */
                     current_state.volume_2 = data_volume;
                     break;
 
                 /* Noise */
-                case 0x60: statistic_noise_bytes_written++;
+                case 0x60:
 
-                    /* printf ("Noise        = %01x\n", data_low); */
                     break;
 
-                case 0x70: statistic_noise_bytes_written++;
+                case 0x70:
 
-                    /* printf ("Noise volume = %01x\n", data_volume); */
                     break;
                 }
             }
@@ -271,95 +243,76 @@ int main (int argc, char **argv)
                 switch (latch)
                 {
                 /* Tone0 */
-                case 0x00: statistic_tone0_bytes_written++;
+                case 0x00:
 
-                    /* printf ("Tone0 high   = %03x\n", data_high); */
                     current_state.tone_0 &= 0x03;
                     current_state.tone_0 |= (data_high >> 2);
                     break;
 
-                case 0x10: statistic_tone0_bytes_written++;
+                case 0x10:
 
-                    /* printf ("Tone0 volume = %01x\n", data_volume); */
                     current_state.volume_0 = data_volume;
                     break;
 
                 /* Tone1 */
-                case 0x20: statistic_tone1_bytes_written++;
+                case 0x20:
 
-                    /* printf ("Tone1 high   = %03x\n", data_high); */
                     current_state.tone_1 &= 0x03;
                     current_state.tone_1 |= (data_high >> 2);
                     break;
 
-                case 0x30: statistic_tone1_bytes_written++;
+                case 0x30:
 
-                    /* printf ("Tone1 volume = %01x\n", data_volume); */
                     current_state.volume_1 = data_volume;
                     break;
 
                 /* Tone2 */
-                case 0x40: statistic_tone2_bytes_written++;
+                case 0x40:
 
-                    /* printf ("Tone2 high   = %03x\n", data_high); */
                     current_state.tone_2 &= 0x03;
                     current_state.tone_2 |= (data_high >> 2);
                     break;
 
-                case 0x50: statistic_tone2_bytes_written++;
+                case 0x50:
 
-                    /* printf ("Tone2 volume = %01x\n", data_volume); */
                     current_state.volume_2 = data_volume;
                     break;
 
                 /* Noise */
-                case 0x60: statistic_noise_bytes_written++;
+                case 0x60:
 
-                    /* printf ("Noise        = %01x\n", data_low); */
                     break;
 
-                case 0x70: statistic_noise_bytes_written++;
+                case 0x70:
 
-                    /* printf ("Noise volume = %01x\n", data_volume); */
                     break;
                 }
             }
             break;
 #if 0
         case 0x61: /* Wait n 44.1 KHz samples */
-            printf ("Delay: %d samples.\n", * (uint16_t *)(&buffer[i + 1]));
             i += 2;
             break;
 #endif
         case 0x62: /* Wait 1/60 of a second */
-            /* printf ("--- Frame delay ---\n"); */
             write_delay_count++;
-            statistic_delays++;
             break;
 #if 0
         case 0x63: /* Wait 1/50 of a second */
-            printf ("Delay: 1/50 of a second.\n");
             break;
 #endif
         case 0x66: /* End of sound data */
             statistic_total_output_size += write_frame ();
             write_delay_count = 0;
             statistic_total_output_size += write_frame ();
-            printf ("End of sound data.\n");
             i = 12 * 1024;
             break;
         default:
-            printf ("Unknow command %02x.\n", buffer[i]);
+            fprintf (stderr, "Unknow command %02x.\n", buffer[i]);
         }
     }
 
-    printf ("Done.\n");
-    printf ("%d 1/60 second delays.\n", statistic_delays);
-    printf ("%d bytes written for tone0.\n", statistic_tone0_bytes_written);
-    printf ("%d bytes written for tone1.\n", statistic_tone1_bytes_written);
-    printf ("%d bytes written for tone2.\n", statistic_tone2_bytes_written);
-    printf ("%d bytes written for noise.\n", statistic_noise_bytes_written);
-    printf ("%d bytes output.\n", statistic_total_output_size);
+    fprintf (stderr, "Done. %d bytes output.\n", statistic_total_output_size);
 
     free (buffer);
     fclose (source_vgm);
