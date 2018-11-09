@@ -167,6 +167,8 @@ int main (int argc, char **argv)
     /* TODO: For now, we assume the version is less than 1.50 and that
      *       data starts at 0x40 */
 
+    /* TODO: Support for repeating */
+
     for (uint32_t i = 0x40; i < (12 * 1024); i++)
     {
         switch (buffer[i])
