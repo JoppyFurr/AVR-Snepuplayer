@@ -10,9 +10,11 @@ typedef struct psg_regs_s
     uint8_t tone_0;
     uint8_t tone_1;
     uint8_t tone_2;
+    uint8_t noise;
     uint8_t volume_0;
     uint8_t volume_1;
     uint8_t volume_2;
+    uint8_t volume_3;
 } psg_regs;
 
 #define TONE_0_BIT     0x01
@@ -83,7 +85,12 @@ int write_frame (void)
         frame[frame_size++] = current_state.tone_2;
     }
 
-    /* TODO: Noise */
+    /* Noise */
+    if (current_state.noise != previous_state.noise)
+    {
+        frame[0] |= NOISE_BIT;
+        frame[frame_size++] = current_state.noise;
+    }
 
     /* Volume 0/1 */
     if ((current_state.volume_0 != previous_state.volume_0) ||
@@ -94,11 +101,11 @@ int write_frame (void)
     }
 
     /* Volume 2/N */
-    /* TODO: Noise */
-    if (current_state.volume_2 != previous_state.volume_2)
+    if ((current_state.volume_2 != previous_state.volume_2) ||
+        (current_state.volume_3 != previous_state.volume_3))
     {
         frame[0] |= VOLUME_2_N_BIT;
-        frame[frame_size++] = current_state.volume_2;
+        frame[frame_size++] = current_state.volume_2 | (current_state.volume_3 << 4);
     }
 
     for (int i = 0; i < frame_size; i++)
@@ -196,47 +203,41 @@ int main (int argc, char **argv)
                 {
                 /* Tone0 */
                 case 0x00:
-
                     current_state.tone_0 &= 0xfc;
                     current_state.tone_0 |= (data_low >> 2);
                     break;
 
                 case 0x10:
-
                     current_state.volume_0 = data_volume;
                     break;
 
                 /* Tone1 */
                 case 0x20:
-
                     current_state.tone_1 &= 0xfc;
                     current_state.tone_1 |= (data_low >> 2);
                     break;
 
                 case 0x30:
-
                     current_state.volume_1 = data_volume;
                     break;
 
                 /* Tone2 */
                 case 0x40:
-
                     current_state.tone_2 &= 0xfc;
                     current_state.tone_2 |= (data_low >> 2);
                     break;
 
                 case 0x50:
-
                     current_state.volume_2 = data_volume;
                     break;
 
                 /* Noise */
                 case 0x60:
-
+                    current_state.noise = data_low;
                     break;
 
                 case 0x70:
-
+                    current_state.volume_3 = data_volume;
                     break;
                 }
             }
@@ -245,25 +246,21 @@ int main (int argc, char **argv)
                 {
                 /* Tone0 */
                 case 0x00:
-
                     current_state.tone_0 &= 0x03;
                     current_state.tone_0 |= (data_high >> 2);
                     break;
 
                 case 0x10:
-
                     current_state.volume_0 = data_volume;
                     break;
 
                 /* Tone1 */
                 case 0x20:
-
                     current_state.tone_1 &= 0x03;
                     current_state.tone_1 |= (data_high >> 2);
                     break;
 
                 case 0x30:
-
                     current_state.volume_1 = data_volume;
                     break;
 
@@ -275,17 +272,16 @@ int main (int argc, char **argv)
                     break;
 
                 case 0x50:
-
                     current_state.volume_2 = data_volume;
                     break;
 
                 /* Noise */
                 case 0x60:
-
+                    current_state.noise = data_low;
                     break;
 
                 case 0x70:
-
+                    current_state.volume_3 = data_volume;
                     break;
                 }
             }
