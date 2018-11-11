@@ -3,30 +3,40 @@
 .def prod_low    = r0
 .def prod_high   = r1
 
-; SN79489 registers
+; SN79489 registers (low)
 .def tone_0      = r2
 .def tone_1      = r3
 .def tone_2      = r4
-.def counter_0   = r5
-.def counter_1   = r6
-.def counter_2   = r7
+.def noise       = r5
+.def counter_0   = r6
+.def counter_1   = r7
+.def counter_2   = r8
+.def counter_3   = r9
+.def output_3    = r10
+.def lfsr_low    = r11
+.def lfsr_high   = r12
 
-.def volume_0    = r16 ; Volume and output registers must >= r16 to use muls
+; SN79489 registers (high)
+; High registers are used for volume and output to allow multiplication.
+.def volume_0    = r16
 .def volume_1    = r17
 .def volume_2    = r18
-.def output_0    = r19
-.def output_1    = r20
-.def output_2    = r21
+.def volume_3    = r19
+.def output_0    = r20
+.def output_1    = r21
+.def output_2    = r22
+.def output_lfsr = r23
 
-; Working variables
-.def delay_q     = r9
-.def output      = r22
-.def do_update   = r23
-.def tick_count  = r24
-.def tick_goal   = r25
-.def tick_temp   = r26
-.def main_temp   = r27
-.def frame_head  = r28
+; Working variables (low)
+.def delay_q     = r13
+.def output      = r14
+
+; Working variables (high)
+.def tick_count  = r25
+.def tick_goal   = r26
+.def tick_temp   = r27
+.def main_temp   = r28
+.def frame_head  = r29
 
 ; r30 and r31 are reserved for indexing data in flash (Z-register)
 
@@ -47,56 +57,122 @@ Tick:
 
 Tone0_decrement:
     tst     counter_0
-    breq    Tone0_toggle
+    breq    Tone0_skip_decrement
     dec     counter_0
+Tone0_skip_decrement:
 
-Tone0_toggle:
     ; TODO: When tone=0, output=1
     tst     counter_0
     brne    Tone1_decrement
     mov     counter_0,  tone_0
     neg     output_0
-    ; ldi     do_update,  0x01
 
 Tone1_decrement:
     tst     counter_1
-    breq    Tone1_toggle
+    breq    Tone1_skip_decrement
     dec     counter_1
+Tone1_skip_decrement:
 
-Tone1_toggle:
     tst     counter_1
     brne    Tone2_decrement
     mov     counter_1,  tone_1
     neg     output_1
-    ; ldi     do_update,  0x01
 
 Tone2_decrement:
     tst     counter_2
-    breq    Tone2_toggle
+    breq    Tone2_skip_decrement
     dec     counter_2
+Tone2_skip_decrement:
 
-Tone2_toggle:
     tst     counter_2
     brne    Noise_decrement
     mov     counter_2,  tone_2
     neg     output_2
-    ; ldi     do_update,  0x01
-
 
 Noise_decrement:
-    ; TODO: Implement the noise channel
+    tst     counter_3
+    breq    Noise_skip_decrement
+    dec     counter_3
+Noise_skip_decrement:
 
+    tst     counter_3
+    brne    Noise_shift_done
 
-Update:
-    ; tst     do_update         ; Trying to skip redundant updates caused garbage sound
-    ; breq    Tick_done
-    ; clr     do_update
+    ; The reset value of counter_3 depends on the lower two bits of
+    ; the noise register value. We'll also need to divide these reset
+    ; values to compensate for simulating 1/4 the clock speed.
+    ;  0 - Reset to 0x04 (0x10)
+    ;  1 - Reset to 0x08 (0x20)
+    ;  2 - Reset to 0x10 (0x40)
+    ;  3 - Reset to Tone2
+    mov     tick_temp,  noise
+    andi    tick_temp,  0x03
+    cpi     tick_temp,  0x00
+    breq    Noise_reset_10
+    cpi     tick_temp,  0x01
+    breq    Noise_reset_20
+    cpi     tick_temp,  0x02
+    breq    Noise_reset_40
+    cpi     tick_temp,  0x03
+    breq    Noise_reset_T2
+Noise_reset_10:
+    ldi     tick_temp,  0x04 ; 0x10
+    mov     counter_3,  tick_temp
+    rjmp    Noise_reset_done
+Noise_reset_20:
+    ldi     tick_temp,  0x08 ; 0x20
+    mov     counter_3,  tick_temp
+    rjmp    Noise_reset_done
+Noise_reset_40:
+    ldi     tick_temp,  0x10 ; 0x40
+    mov     counter_3,  tick_temp
+    rjmp    Noise_reset_done
+Noise_reset_T2:
+    mov     counter_3,  tone_2
+Noise_reset_done:
 
-    muls    output_0,   volume_0 ; We pre-invert the volume in convert.c
+    ; Invert the output and check for a -1 -> +1 transition
+    neg     output_3
+    mov     tick_temp,  output_3
+    cpi     tick_temp,  0x01
+    brne    Noise_shift_done
+
+    ; Output is the least-significant bit of the lfsr
+    mov     output_lfsr, lfsr_low
+    andi    output_lfsr, 0x01
+
+    ; Perform the shift
+    ldi     tick_temp,  0x80
+    lsr     lfsr_low
+    sbrc    lfsr_high,  0
+    or      lfsr_low,   tick_temp
+    lsr     lfsr_high
+
+    ; Feed bit 0 back into the lfsr
+    sbrc    output_lfsr, 0
+    or      lfsr_high,  tick_temp
+
+    ; For periodic noise, we are now done. (only bit 0 tapped)
+    sbrs    noise,      2
+    rjmp    Noise_shift_done
+
+    ; For white noise, we also want to tap what was bit 3
+    clr     tick_temp
+    sbrc    lfsr_low, 2
+    ldi     tick_temp,  0x80
+    eor     lfsr_high,  tick_temp
+
+Noise_shift_done:
+
+Update_pwm:
+    ; Volumes are pre-inverted in convert.c
+    muls    output_0,   volume_0
     mov     output,     prod_low
     muls    output_1,   volume_1
     add     output,     prod_low
     muls    output_2,   volume_2
+    add     output,     prod_low
+    muls    output_lfsr, volume_3
     add     output,     prod_low
 
     ; Output using 128 as the zero level
@@ -153,9 +229,11 @@ Init:
     ldi     output_0,   0x01
     ldi     output_1,   0xff
     ldi     output_2,   0x01
+    mov     output_3,   output_1
     ldi     volume_0,   0x00
     ldi     volume_1,   0x00
     ldi     volume_2,   0x00
+    ldi     volume_3,   0x00
 
     ; Enable interrupts
     sei
@@ -170,8 +248,6 @@ Init:
     mov     delay_q,    main_temp
     rcall   Delay
     ; C ~523 Hz Tone0
-    ldi     main_temp,  0x0c
-    mov     volume_0,   main_temp
     ldi     main_temp,  0x35
     mov     tone_0,     main_temp
     ldi     main_temp,  120
@@ -217,7 +293,16 @@ Play_frame:
     sbrc    frame_head, 2
     lpm     tone_2,     Z+
 
-    ; Update volume registers
+    ; Update the noise register and reset the lfsr
+    sbrs    frame_head, 3
+    rjmp    Skip_noise
+    lpm     noise,      Z+
+    clr     lfsr_high
+    clr     lfsr_low
+    inc     lfsr_low
+Skip_noise:
+
+    ; Update volume_0 / volume_1 registers
     sbrs    frame_head, 4
     rjmp    Skip_vol_0_1
     lpm     main_temp,  Z+
@@ -230,11 +315,17 @@ Play_frame:
     mov     volume_1,   main_temp
 Skip_vol_0_1:
 
+    ; Update volume_2 / volume_3 registers
     sbrs    frame_head, 5
     rjmp    Skip_vol_2_n
     lpm     main_temp,  Z+
-    andi    main_temp,  0x0f
     mov     volume_2,   main_temp
+    andi    volume_2,   0x0f
+    lsr     main_temp
+    lsr     main_temp
+    lsr     main_temp
+    lsr     main_temp
+    mov     volume_3,   main_temp
 Skip_vol_2_n:
 
     ; Delay (in quarter-frames)
