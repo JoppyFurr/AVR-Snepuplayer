@@ -99,7 +99,8 @@ Update:
     muls    output_2,   volume_2
     add     output,     prod_low
 
-    ; Centre signed output as 128 for unsigned output
+    ; Output using 128 as the zero level
+    lsl     output
     ldi     tick_temp,  128
     add     output,     tick_temp
     out     OCR2,       output
