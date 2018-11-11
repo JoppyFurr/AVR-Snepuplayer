@@ -29,10 +29,13 @@ typedef struct psg_regs_s
 psg_regs current_state = { 0 };
 uint8_t write_delay_count = 0;
 
-uint8_t  output[8192] = { 0 };
+#define OUTPUT_LIMIT 7680
+uint8_t  output[OUTPUT_LIMIT + 6] = { 0 };
 uint32_t output_size = 0;
 
 /* TODO: Support delays > 3/60s. */
+/* TODO: Support non-1/60 delays. */
+/* TODO: Support compressed vgm files */
 int write_frame (void)
 {
     static psg_regs previous_state;
@@ -142,15 +145,15 @@ int main (int argc, char **argv)
     }
 
     /* TODO: Make this dynamic */
-    buffer = malloc (12 * 1024);
+    buffer = malloc (32 * 1024);
     if (buffer == NULL)
     {
-        fprintf (stderr, "Error: Unable to allocate 12K of memory.\n");
+        fprintf (stderr, "Error: Unable to allocate 32K of memory.\n");
         fclose (source_vgm);
         return EXIT_FAILURE;
     }
 
-    fread (buffer, sizeof (uint8_t), 12 * 1024, source_vgm);
+    fread (buffer, sizeof (uint8_t), 32 * 1024, source_vgm);
     if (memcmp (buffer, "Vgm ", 4))
     {
         if (buffer[0] == 0x1f && buffer[1] == 0x8b)
@@ -176,7 +179,7 @@ int main (int argc, char **argv)
 
     /* TODO: Support for repeating */
 
-    for (uint32_t i = 0x40; i < (12 * 1024); i++)
+    for (uint32_t i = 0x40; (i < (32 * 1024)) && (output_size < OUTPUT_LIMIT); i++)
     {
         switch (buffer[i])
         {
@@ -300,7 +303,7 @@ int main (int argc, char **argv)
 #endif
         case 0x66: /* End of sound data */
             write_frame ();
-            i = 12 * 1024;
+            i = 32 * 1024;
             break;
         default:
             fprintf (stderr, "Unknow command %02x.\n", buffer[i]);
