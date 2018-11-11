@@ -46,13 +46,11 @@ Tick:
     inc     tick_count
 
 Tone0_decrement:
-    ; ~137 cycles remaining
     tst     counter_0
     breq    Tone0_toggle
     dec     counter_0
 
 Tone0_toggle:
-    ; ~134 cycles remaining
     ; TODO: When tone=0, output=1
     tst     counter_0
     brne    Tone1_decrement
@@ -61,13 +59,11 @@ Tone0_toggle:
     ; ldi     do_update,  0x01
 
 Tone1_decrement:
-    ; ~131 cycles remaining
     tst     counter_1
     breq    Tone1_toggle
     dec     counter_1
 
 Tone1_toggle:
-    ; ~128 cycles remaining
     tst     counter_1
     brne    Tone2_decrement
     mov     counter_1,  tone_1
@@ -75,13 +71,11 @@ Tone1_toggle:
     ; ldi     do_update,  0x01
 
 Tone2_decrement:
-    ; ~125 cycles remaining
     tst     counter_2
     breq    Tone2_toggle
     dec     counter_2
 
 Tone2_toggle:
-    ; ~122 cycles remaining
     tst     counter_2
     brne    Noise_decrement
     mov     counter_2,  tone_2
@@ -94,7 +88,6 @@ Noise_decrement:
 
 
 Update:
-    ; ~119 cycles remaining
     ; tst     do_update         ; Trying to skip redundant updates caused garbage sound
     ; breq    Tick_done
     ; clr     do_update
