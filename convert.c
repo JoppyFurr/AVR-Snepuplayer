@@ -260,6 +260,7 @@ int main (int argc, char **argv)
     /* File I/O */
     char *filename = argv[1];
     uint8_t *buffer = NULL;
+    uint32_t vgm_offset = 0;
 
     /* PSG */
     uint8_t latch = 0;
@@ -285,9 +286,17 @@ int main (int argc, char **argv)
     fprintf (stderr, "Version: %x.\n",       * (uint32_t *)(&buffer[0x08]));
     fprintf (stderr, "Clock rate: %d Hz.\n", * (uint32_t *)(&buffer[0x0c]));
     fprintf (stderr, "Rate: %d Hz.\n",       * (uint32_t *)(&buffer[0x24]));
+    fprintf (stderr, "VGM offset: %02x.\n",  * (uint32_t *)(&buffer[0x34]));
 
-    /* TODO: For now, we assume the version is less than 1.50 and that
-     *       data starts at 0x40 */
+    /* TODO: For now, we're assuming a little-endian host */
+    if (* (uint32_t *)(&buffer[0x34]) != 0)
+    {
+        vgm_offset = 0x34 + * (uint32_t *)(&buffer[0x34]);
+    }
+    else
+    {
+        vgm_offset = 0x40;
+    }
 
     /* TODO: Support for repeating */
 
