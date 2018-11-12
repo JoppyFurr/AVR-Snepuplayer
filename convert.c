@@ -2,6 +2,142 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <zlib.h>
+
+const uint8_t  vgm_magic[4] = { 'V', 'g', 'm', ' ' };
+const uint8_t gzip_magic[3] = { 0x1f, 0x8b, 0x08 };
+
+#define SOURCE_SIZE_MAX 524288
+#define OUTPUT_SIZE_MAX 7680
+
+uint8_t *read_vgz (char *filename)
+{
+    gzFile source_vgz = NULL;
+    uint8_t file_magic[4] = { 0 };
+    uint8_t scratch[128] = { 0 };
+    uint8_t *buffer = NULL;
+    uint32_t filesize = 0;
+
+    source_vgz = gzopen (filename, "rb");
+    if (source_vgz == NULL)
+    {
+        fprintf (stderr, "Error: Unable to open vgz %s.\n", filename);
+        return NULL;
+    }
+
+    gzread (source_vgz, file_magic, 4);
+    gzrewind (source_vgz);
+
+    /* Check the magic bytes are valid */
+    if (memcmp (file_magic, vgm_magic, 4) != 0)
+    {
+        fprintf (stderr, "Error: File is not a valid VGM.\n");
+        gzclose (source_vgz);
+        return NULL;
+    }
+
+    /* Get the uncompressed filesize by reading the contents */
+    while (gzread (source_vgz, scratch, 128) == 128);
+    filesize = gztell (source_vgz);
+    gzrewind (source_vgz);
+
+    if (filesize > SOURCE_SIZE_MAX)
+    {
+        fprintf (stderr, "Error: Source file (uncompressed) larger than 512 KiB.\n");
+        gzclose (source_vgz);
+        return NULL;
+    }
+
+    /* Allocate a buffer */
+    buffer = malloc (filesize);
+    if (buffer == NULL)
+    {
+        fprintf (stderr, "Error: Unable to allocate %d bytes of memory.\n", filesize);
+        gzclose (source_vgz);
+        return NULL;
+    }
+
+    /* Read the file */
+    if (gzread (source_vgz, buffer, filesize) != filesize)
+    {
+        fprintf (stderr, "Error: Unable to read %d bytes from file.\n", filesize);
+        gzclose (source_vgz);
+        free (buffer);
+        return NULL;
+    }
+
+    gzclose (source_vgz);
+
+    return buffer;
+}
+
+uint8_t *read_vgm (char *filename)
+{
+    FILE *source_vgm = NULL;
+    uint8_t file_magic[4] = { 0 };
+    uint8_t *buffer = NULL;
+    uint32_t filesize = 0;
+
+    source_vgm = fopen (filename, "rb");
+    if (source_vgm == NULL)
+    {
+        fprintf (stderr, "Error: Unable to open %s.\n", filename);
+        return NULL;
+    }
+
+    fread (file_magic, sizeof (uint8_t), 4, source_vgm);
+    rewind (source_vgm);
+
+    /* First, check if we should be using the vgz path instead */
+    if (memcmp (file_magic, gzip_magic, 3) == 0)
+    {
+        fclose (source_vgm);
+
+        return read_vgz (filename);
+    }
+
+    if (memcmp (file_magic, vgm_magic, 4) != 0)
+    {
+        fclose (source_vgm);
+        fprintf (stderr, "Error: File is not a valid VGM.\n");
+        return NULL;
+    }
+
+    /* Get the filesize */
+    fseek (source_vgm, 0, SEEK_END);
+    filesize = ftell (source_vgm);
+
+    rewind (source_vgm);
+
+    if (filesize > SOURCE_SIZE_MAX)
+    {
+        fprintf (stderr, "Error: Source file larger than 512 KiB.\n");
+        fclose (source_vgm);
+        return NULL;
+    }
+
+    /* Allocate a buffer */
+    buffer = malloc (filesize);
+    if (buffer == NULL)
+    {
+        fprintf (stderr, "Error: Unable to allocate %d bytes of memory.\n", filesize);
+        fclose (source_vgm);
+        return NULL;
+    }
+
+    /* Read the file */
+    if (fread (buffer, sizeof (uint8_t), filesize, source_vgm) != filesize)
+    {
+        fprintf (stderr, "Error: Unable to read %d bytes from file.\n", filesize);
+        fclose (source_vgm);
+        free (buffer);
+        return NULL;
+    }
+
+    fclose (source_vgm);
+
+    return buffer;
+}
 
 /* A struct to represent our pseudo-psg registers */
 /* For now, just tones. Noise should be added later */
@@ -29,13 +165,11 @@ typedef struct psg_regs_s
 psg_regs current_state = { 0 };
 uint8_t write_delay_count = 0;
 
-#define OUTPUT_LIMIT 7680
-uint8_t  output[OUTPUT_LIMIT + 6] = { 0 };
+uint8_t  output[OUTPUT_SIZE_MAX + 6] = { 0 };
 uint32_t output_size = 0;
 
 /* TODO: Support delays > 3/60s. */
 /* TODO: Support non-1/60 delays. */
-/* TODO: Support compressed vgm files */
 int write_frame (void)
 {
     static psg_regs previous_state;
@@ -123,8 +257,11 @@ int write_frame (void)
 
 int main (int argc, char **argv)
 {
-    FILE *source_vgm = NULL;
+    /* File I/O */
+    char *filename = argv[1];
     uint8_t *buffer = NULL;
+
+    /* PSG */
     uint8_t latch = 0;
     uint8_t data = 0;
     uint16_t data_low = 0;
@@ -137,36 +274,11 @@ int main (int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    source_vgm = fopen (argv[1], "r");
-    if (source_vgm == NULL)
-    {
-        fprintf (stderr, "Error: Unable to open %s.\n", argv[1]);
-        return EXIT_FAILURE;
-    }
+    buffer = read_vgm (filename);
 
-    /* TODO: Make this dynamic */
-    buffer = malloc (32 * 1024);
     if (buffer == NULL)
     {
-        fprintf (stderr, "Error: Unable to allocate 32K of memory.\n");
-        fclose (source_vgm);
-        return EXIT_FAILURE;
-    }
-
-    fread (buffer, sizeof (uint8_t), 32 * 1024, source_vgm);
-    if (memcmp (buffer, "Vgm ", 4))
-    {
-        if (buffer[0] == 0x1f && buffer[1] == 0x8b)
-        {
-            fprintf (stderr, "Error: File %s appears to be compressed.\n", argv[1]);
-        }
-        else
-        {
-            fprintf (stderr, "Error: File %s is not a VGM.\n", argv[1]);
-        }
-
-        free (buffer);
-        fclose (source_vgm);
+        /* read_vgm should already have output an error message */
         return EXIT_FAILURE;
     }
 
@@ -179,7 +291,7 @@ int main (int argc, char **argv)
 
     /* TODO: Support for repeating */
 
-    for (uint32_t i = 0x40; (i < (32 * 1024)) && (output_size < OUTPUT_LIMIT); i++)
+    for (uint32_t i = 0x40; (i < SOURCE_SIZE_MAX) && (output_size < OUTPUT_SIZE_MAX); i++)
     {
         switch (buffer[i])
         {
@@ -303,10 +415,11 @@ int main (int argc, char **argv)
 #endif
         case 0x66: /* End of sound data */
             write_frame ();
-            i = 32 * 1024;
+            i = SOURCE_SIZE_MAX;
             break;
         default:
             fprintf (stderr, "Unknow command %02x.\n", buffer[i]);
+            break;
         }
     }
 
@@ -320,5 +433,4 @@ int main (int argc, char **argv)
     fprintf (stderr, "Done. %d bytes output.\n", output_size);
 
     free (buffer);
-    fclose (source_vgm);
 }
