@@ -456,6 +456,14 @@ int main (int argc, char **argv)
             i = SOURCE_SIZE_MAX;
             break;
 
+        /* 0x7n: Wait n+1 samples */
+        case 0x70: case 0x71: case 0x72: case 0x73:
+        case 0x74: case 0x75: case 0x76: case 0x77:
+        case 0x78: case 0x79: case 0x7a: case 0x7b:
+        case 0x7c: case 0x7d: case 0x7e: case 0x7f:
+            samples_delay += 1 + (buffer[i] & 0x0f);
+            break;
+
         default:
             fprintf (stderr, "Unknow command %02x.\n", buffer[i]);
             break;
