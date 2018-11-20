@@ -163,18 +163,22 @@ typedef struct psg_regs_s
 /* State tracking */
 /* OwO - notices your globals */
 psg_regs current_state = { 0 };
-uint8_t write_delay_count = 0;
+uint32_t samples_delay = 0;
 
 uint8_t  output[OUTPUT_SIZE_MAX + 6] = { 0 };
 uint32_t output_size = 0;
 
-/* TODO: Support delays > 3/60s. */
-/* TODO: Support non-1/60 delays. */
+/* TODO: For PAL music, perhaps define delay as multiples of 1/50, or have
+ *       a shorter delay like 1/300 that can cleanly describy both PAL and
+ *       NTSC timings. */
 int write_frame (void)
 {
     static psg_regs previous_state;
-    uint8_t frame[8] = { 0 };
+    uint8_t frame[32] = { 0 };
     uint8_t frame_size = 1;
+    uint16_t frame_delay = samples_delay / 735;
+
+    samples_delay -= frame_delay * 735;
 
     /* Header format description:
      *
@@ -188,7 +192,7 @@ int write_frame (void)
      *  vv   ->   01: Tone0 and Tone1 volume change follows
      *       ->   10: Tone2 and Noise volume change follows
      *
-     *  dd   ->   00: End of data
+     *  dd   ->   00: No delay
      *            01: 1/60s delay after this data frame
      *            10: 2/60s delay after this data frame
      *            11: 3/60s delay after this data frame
@@ -198,8 +202,6 @@ int write_frame (void)
      *  While we lose two bits of accuracy for the tone registers,
      *  the output is only ~30% the size of the uncompressed VGM file.
      */
-
-    frame[0] |= write_delay_count << 6;
 
     /* Tone0 */
     if (current_state.tone_0 != previous_state.tone_0)
@@ -243,6 +245,31 @@ int write_frame (void)
     {
         frame[0] |= VOLUME_2_N_BIT;
         frame[frame_size++] = current_state.volume_2 | (current_state.volume_3 << 4);
+    }
+
+    if (frame_delay > 3)
+    {
+        frame[0] |= 3 << 6;
+        frame_delay -= 3;
+    }
+    else
+    {
+        frame[0] |= frame_delay << 6;
+        frame_delay = 0;
+    }
+
+    while (frame_delay != 0)
+    {
+        if (frame_delay > 3)
+        {
+            frame[frame_size++] |= 3 << 6;
+            frame_delay -= 3;
+        }
+        else
+        {
+            frame[frame_size++] |= frame_delay << 6;
+            frame_delay = 0;
+        }
     }
 
     for (int i = 0; i < frame_size; i++)
@@ -307,11 +334,11 @@ int main (int argc, char **argv)
         case 0x4f:
             i++; /* Gamegear stereo data - Ignore */
             break;
+
         case 0x50: /* PSG Data */
-            if (write_delay_count)
+            if (samples_delay >= 735)
             {
                 write_frame ();
-                write_delay_count = 0;
             }
             data = buffer[++i];
             data_low  = data & 0x0f;
@@ -410,22 +437,25 @@ int main (int argc, char **argv)
                 }
             }
             break;
-#if 0
+
         case 0x61: /* Wait n 44.1 KHz samples */
+            samples_delay += * (uint16_t *)(&buffer[i+1]);
             i += 2;
             break;
-#endif
+
         case 0x62: /* Wait 1/60 of a second */
-            write_delay_count++;
+            samples_delay += 735;
             break;
-#if 0
+
         case 0x63: /* Wait 1/50 of a second */
+            samples_delay += 882;
             break;
-#endif
+
         case 0x66: /* End of sound data */
             write_frame ();
             i = SOURCE_SIZE_MAX;
             break;
+
         default:
             fprintf (stderr, "Unknow command %02x.\n", buffer[i]);
             break;
