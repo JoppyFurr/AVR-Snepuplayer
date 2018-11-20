@@ -327,7 +327,7 @@ int main (int argc, char **argv)
 
     /* TODO: Support for repeating */
 
-    for (uint32_t i = 0x40; (i < SOURCE_SIZE_MAX) && (output_size < OUTPUT_SIZE_MAX); i++)
+    for (uint32_t i = vgm_offset; (i < SOURCE_SIZE_MAX) && (output_size < OUTPUT_SIZE_MAX); i++)
     {
         switch (buffer[i])
         {
