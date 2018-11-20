@@ -225,6 +225,10 @@ Init:
     ldi     main_temp,  0x08
     out     DDRB,       main_temp
 
+    ; DDRC: Use PortC to drive some LEDs
+    ldi     main_temp,  0x0f
+    out     DDRB,       main_temp
+
     ; Initial values for SN79489
     ldi     output_0,   0x01
     ldi     output_1,   0xff
@@ -327,6 +331,18 @@ Skip_vol_0_1:
     lsr     main_temp
     mov     volume_3,   main_temp
 Skip_vol_2_n:
+
+    ; Do something with PortC for LEDs :3
+    clr     main_temp
+    out     PORTC,      main_temp
+    cpse    volume_0,   main_temp
+    sbi     PORTC,      0
+    cpse    volume_1,   main_temp
+    sbi     PORTC,      1
+    cpse    volume_2,   main_temp
+    sbi     PORTC,      2
+    cpse    volume_3,   main_temp
+    sbi     PORTC,      3
 
     ; Delay (in quarter-frames)
     andi    frame_head, 0xc0
